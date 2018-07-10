@@ -8,6 +8,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/dustin/go-humanize"
+	"github.com/mhann/gospeedtest"
 	"github.com/urfave/cli"
 )
 
@@ -44,9 +46,9 @@ func main() {
 					Usage: "The port on which the server software is listening.",
 				},
 				cli.UintFlag{
-					Name:  "Bytes",
-					Value: 10000000,
-					Usage: "The number of bytes to use for the speed test.",
+					Name:  "Length",
+					Value: 30,
+					Usage: "The length of the speed test in seconds.",
 				},
 				cli.UintFlag{
 					Name:  "Delay",
@@ -76,6 +78,7 @@ func main() {
 
 func background(c *cli.Context) error {
 	log.Println("Starting background logging")
+
 	for {
 		f, err := os.OpenFile(c.String("LogFile"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
@@ -83,8 +86,8 @@ func background(c *cli.Context) error {
 		}
 
 		port := c.Uint("Port")
-		data := c.Uint("Bytes")
-		speed := runSpeedTest(c.String("Server"), port, data)
+		length := int(c.Uint("Length"))
+		speed := runSpeedTest(c.String("Server"), port, length)
 
 		defer f.Close()
 		if _, err = f.WriteString(fmt.Sprintf("%v,%f\n", time.Now().Format(time.RFC3339), speed)); err != nil {
@@ -101,14 +104,14 @@ func ping(c *cli.Context) error {
 	return nil
 }
 
-func runSpeedTest(host string, port uint, data uint) float64 {
+func runSpeedTest(host string, port uint, length int) float64 {
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
 		log.Printf("Failed to connect to %s port %d")
 		return 0
 	}
 
-	fmt.Fprintf(conn, "r;%d;d;\n", data)
+	fmt.Fprintf(conn, "r;%d;d;\n", length)
 	response, err := bufio.NewReader(conn).ReadString('\n')
 	if err != nil {
 		log.Println("Failed to read response from server")
@@ -122,21 +125,34 @@ func runSpeedTest(host string, port uint, data uint) float64 {
 
 	log.Println("Server accepted speed test request")
 
-	lengthInt := data
-	bytesReceived := uint(0)
-	log.Println("Starting speed test")
-	start := time.Now()
-	for bytesReceived < lengthInt {
-		bytesBuffer := make([]byte, 512)
-		conn.Read(bytesBuffer)
-		bytesReceived += 512
+	speed := make(chan speedtest.BytesPerTime)
+	go speedtest.ReceiveData(conn, speed, length)
+
+	averageBytesPerSecond := uint64(0)
+	reports := 0
+
+	for {
+		select {
+		case <-time.After(5 * time.Second):
+			speedReport, ok := <-speed
+			if !ok {
+				log.Println("Speed test ended")
+				log.Printf("Average bytes per second: %s", humanize.Bytes(averageBytesPerSecond))
+				return float64(averageBytesPerSecond)
+			}
+			if speedReport.Time != 0 {
+				bytesPerSecond := float64(speedReport.Bytes) / speedReport.Time.Seconds()
+				if reports == 0 {
+					averageBytesPerSecond = uint64(bytesPerSecond)
+					reports = 1
+				} else {
+					averageBytesPerSecond = uint64(int(averageBytesPerSecond) + ((int(bytesPerSecond) - int(averageBytesPerSecond)) / (reports + 1)))
+					reports++
+				}
+				log.Printf("%s/s", humanize.Bytes(uint64(bytesPerSecond)))
+			} else {
+				log.Printf("No data transferred")
+			}
+		}
 	}
-	finish := time.Now()
-	log.Println("Speed test finished")
-	elapsed := finish.Sub(start)
-	log.Printf("Test took %v\n", elapsed)
-	bytesPerSecond := float64(lengthInt) / elapsed.Seconds()
-	megabitsPerSecond := (bytesPerSecond * 8) / 1000 / 1000
-	log.Printf("This gives a speed of %fmbps\n", megabitsPerSecond)
-	return megabitsPerSecond
 }

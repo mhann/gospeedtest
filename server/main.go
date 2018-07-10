@@ -3,10 +3,15 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"math/rand"
 	"net"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/dustin/go-humanize"
+	"github.com/mhann/gospeedtest"
 )
 
 func main() {
@@ -42,6 +47,27 @@ func handleConnection(conn net.Conn) {
 		direction := commandFields[2]
 		fmt.Printf("Length: %s, Direction: %s\n", length, direction)
 		fmt.Fprintf(conn, "a;\n, _")
+
+		speed := make(chan speedtest.BytesPerTime)
+
+		go speedtest.SendData(conn, speed)
+
+		for {
+			select {
+			case <-time.After(10 * time.Second):
+				speedReport, ok := <-speed
+				if !ok {
+					log.Println("Client disconnected")
+					return
+				}
+				if speedReport.Time != 0 {
+					bytesPerSecond := float64(speedReport.Bytes) / speedReport.Time.Seconds()
+					log.Printf("%s/s", humanize.Bytes(uint64(bytesPerSecond)))
+				} else {
+					log.Printf("No data transferred")
+				}
+			}
+		}
 
 		lengthInt, _ := strconv.Atoi(length)
 
