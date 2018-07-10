@@ -6,46 +6,86 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/mhann/gospeedtest"
+	"github.com/urfave/cli"
 )
 
 func main() {
-	ln, err := net.Listen("tcp", ":8888")
+	app := cli.NewApp()
+
+	app.Name = "gospeedtestserver"
+	app.Version = "0.0.1"
+	app.Authors = []cli.Author{
+		cli.Author{
+			Name:  "Marcus Hann",
+			Email: "marcus@hhra.me",
+		},
+	}
+	app.Usage = "Go speedtest server"
+	app.EnableBashCompletion = true
+
+	app.Commands = []cli.Command{
+		{
+			Name:    "start",
+			Aliases: []string{"s"},
+			Usage:   "Start the speedtest server.",
+			Action:  start,
+			Flags: []cli.Flag{
+				cli.UintFlag{
+					Name:  "Port",
+					Value: 8888,
+					Usage: "The default port for the speedtest server to listen on.",
+				},
+			},
+		},
+	}
+
+	err := app.Run(os.Args)
 	if err != nil {
-		fmt.Println("Failed to start server on port 8888")
+		log.Println(err)
+	}
+}
+
+func start(c *cli.Context) error {
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", c.Uint("Port")))
+	if err != nil {
+		log.Println("Failed to start server on port 8888")
 	}
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			fmt.Println("Error accepting new connection")
+			log.Println("Error accepting new connection")
 		}
 		go handleConnection(conn)
 	}
 }
 
 func handleConnection(conn net.Conn) {
-	fmt.Println("New connection...")
+	log.Println("New connection...")
 
 	command, err := bufio.NewReader(conn).ReadString('\n')
 	if err != nil {
-		fmt.Println("Error recieving command from client")
+		log.Println("Error recieving command from client")
+		return
 	}
 	commandFields := strings.Split(command, ";")
 
 	switch commandFields[0] {
 	case "r":
-		fmt.Println("New speed test request received")
+		log.Println("New speed test request received")
 		if len(commandFields) != 4 {
-			fmt.Println("Incorrect number of arguments!")
+			log.Println("Incorrect number of arguments!")
+			return
 		}
 		length := commandFields[1]
 		direction := commandFields[2]
-		fmt.Printf("Length: %s, Direction: %s\n", length, direction)
+		log.Printf("Length: %s, Direction: %s\n", length, direction)
 		fmt.Fprintf(conn, "a;\n, _")
 
 		speed := make(chan speedtest.BytesPerTime)
@@ -80,6 +120,6 @@ func handleConnection(conn net.Conn) {
 			bytesSent += 512
 		}
 
-		fmt.Printf("Finished sending data")
+		log.Printf("Finished sending data")
 	}
 }
