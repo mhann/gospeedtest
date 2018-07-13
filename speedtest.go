@@ -64,6 +64,8 @@ func (sp *SpeedTest) SpeedAggregator() {
 		aggregatedBytesPerTimeSinceLastReport := BytesPerTime{}
 		sp.Result = SpeedTestResult{}
 
+		numberOfReports := 0
+
 		for {
 			select {
 			case newReport := <-sp.DataStreamChan:
@@ -72,6 +74,15 @@ func (sp *SpeedTest) SpeedAggregator() {
 
 				sp.Result.BytesTransferred += newReport.Bytes
 				sp.Result.Duration += newReport.Time
+
+				bytesPerSecond := float64(newReport.Bytes) / newReport.Time.Seconds()
+				if numberOfReports == 0 {
+					sp.Result.AverageSpeed = uint(bytesPerSecond)
+					numberOfReports = 1
+				} else {
+					sp.Result.AverageSpeed = uint(int(sp.Result.AverageSpeed) + ((int(bytesPerSecond) - int(sp.Result.AverageSpeed)) / (numberOfReports + 1)))
+					numberOfReports++
+				}
 			case sp.ReportChan <- aggregatedBytesPerTimeSinceLastReport:
 				aggregatedBytesPerTimeSinceLastReport = BytesPerTime{}
 			case status := <-sp.StatusChan:

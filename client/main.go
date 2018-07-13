@@ -131,9 +131,6 @@ func runSpeedTest(host string, port uint, length int) float64 {
 	speed := make(chan speedtest.BytesPerTime)
 	go speedTest.ReceiveData(conn, speed, length)
 
-	averageBytesPerSecond := uint64(0)
-	reports := 0
-
 	for {
 		select {
 		case <-time.After(5 * time.Second):
@@ -141,24 +138,20 @@ func runSpeedTest(host string, port uint, length int) float64 {
 			case speedReport := <-speedTest.ReportChan:
 				if speedReport.Time != 0 {
 					bytesPerSecond := float64(speedReport.Bytes) / speedReport.Time.Seconds()
-					if reports == 0 {
-						averageBytesPerSecond = uint64(bytesPerSecond)
-						reports = 1
-					} else {
-						averageBytesPerSecond = uint64(int(averageBytesPerSecond) + ((int(bytesPerSecond) - int(averageBytesPerSecond)) / (reports + 1)))
-						reports++
-					}
 					log.Printf("%s/s", humanize.Bytes(uint64(bytesPerSecond)))
 				} else {
 					log.Printf("No data transferred")
 				}
 			}
 		case status := <-speedTest.StatusChan:
-			if status.Status == speedtest.StatusAborted || status.Status == speedtest.StatusFinished {
+			if status.Status == speedtest.StatusAborted {
+				log.Println("Speed test aborted!")
+				return float64(0)
+			} else if status.Status == speedtest.StatusFinished {
 				log.Println("Speed test ended")
-				log.Printf("Average bytes per second: %s", humanize.Bytes(averageBytesPerSecond))
-				return float64(averageBytesPerSecond)
-				return (0)
+				bytesPerSecond := float64(speedTest.Result.BytesTransferred) / speedTest.Result.Duration.Seconds()
+				log.Printf("Average bytes per second: %v", humanize.Bytes(uint64(bytesPerSecond)))
+				return float64(bytesPerSecond)
 			} else if status.Status == speedtest.StatusStarted {
 				log.Println("Speed test started.")
 			}
