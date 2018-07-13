@@ -87,6 +87,7 @@ func background(c *cli.Context) error {
 
 		port := c.Uint("Port")
 		length := int(c.Uint("Length"))
+
 		speed := runSpeedTest(c.String("Server"), port, length)
 
 		defer f.Close()
@@ -125,8 +126,10 @@ func runSpeedTest(host string, port uint, length int) float64 {
 
 	log.Println("Server accepted speed test request")
 
+	speedTest := speedtest.NewSpeedTest(conn, speedtest.DirectionDown)
+
 	speed := make(chan speedtest.BytesPerTime)
-	go speedtest.ReceiveData(conn, speed, length)
+	go speedTest.ReceiveData(conn, speed, length)
 
 	averageBytesPerSecond := uint64(0)
 	reports := 0
@@ -134,24 +137,30 @@ func runSpeedTest(host string, port uint, length int) float64 {
 	for {
 		select {
 		case <-time.After(5 * time.Second):
-			speedReport, ok := <-speed
-			if !ok {
+			select {
+			case speedReport := <-speedTest.ReportChan:
+				if speedReport.Time != 0 {
+					bytesPerSecond := float64(speedReport.Bytes) / speedReport.Time.Seconds()
+					if reports == 0 {
+						averageBytesPerSecond = uint64(bytesPerSecond)
+						reports = 1
+					} else {
+						averageBytesPerSecond = uint64(int(averageBytesPerSecond) + ((int(bytesPerSecond) - int(averageBytesPerSecond)) / (reports + 1)))
+						reports++
+					}
+					log.Printf("%s/s", humanize.Bytes(uint64(bytesPerSecond)))
+				} else {
+					log.Printf("No data transferred")
+				}
+			}
+		case status := <-speedTest.StatusChan:
+			if status.Status == speedtest.StatusAborted || status.Status == speedtest.StatusFinished {
 				log.Println("Speed test ended")
 				log.Printf("Average bytes per second: %s", humanize.Bytes(averageBytesPerSecond))
 				return float64(averageBytesPerSecond)
-			}
-			if speedReport.Time != 0 {
-				bytesPerSecond := float64(speedReport.Bytes) / speedReport.Time.Seconds()
-				if reports == 0 {
-					averageBytesPerSecond = uint64(bytesPerSecond)
-					reports = 1
-				} else {
-					averageBytesPerSecond = uint64(int(averageBytesPerSecond) + ((int(bytesPerSecond) - int(averageBytesPerSecond)) / (reports + 1)))
-					reports++
-				}
-				log.Printf("%s/s", humanize.Bytes(uint64(bytesPerSecond)))
-			} else {
-				log.Printf("No data transferred")
+				return (0)
+			} else if status.Status == speedtest.StatusStarted {
+				log.Println("Speed test started.")
 			}
 		}
 	}
