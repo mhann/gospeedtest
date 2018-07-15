@@ -63,6 +63,39 @@ func main() {
 			},
 		},
 		{
+			Name:    "single",
+			Aliases: []string{"s"},
+			Usage:   "Run a single speed test",
+			Action:  single,
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "Server",
+					Value: "plex.hhra.me",
+					Usage: "The server to run the speedtest from.",
+				},
+				cli.UintFlag{
+					Name:  "Port",
+					Value: 8888,
+					Usage: "The port on which the server software is listening.",
+				},
+				cli.UintFlag{
+					Name:  "Length",
+					Value: 30,
+					Usage: "The length of the speed test in seconds.",
+				},
+				cli.UintFlag{
+					Name:  "Delay",
+					Value: 20,
+					Usage: "The delay in minutes between speed test runs.",
+				},
+				cli.StringFlag{
+					Name:  "LogFile",
+					Value: "speedtest.csv",
+					Usage: "The csv file within which to log speed test results.",
+				},
+			},
+		},
+		{
 			Name:    "ping",
 			Aliases: []string{"p"},
 			Usage:   "Run a series of pings and get statistics",
@@ -98,6 +131,15 @@ func background(c *cli.Context) error {
 		log.Printf("Sleeping for %d minutes", c.Uint("Delay"))
 		time.Sleep(time.Duration(c.Uint("Delay")) * time.Minute)
 	}
+}
+
+func single(c *cli.Context) error {
+	port := c.Uint("Port")
+	length := int(c.Uint("Length"))
+
+	runSpeedTest(c.String("Server"), port, length)
+
+	return nil
 }
 
 func ping(c *cli.Context) error {
