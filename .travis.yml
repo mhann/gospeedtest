@@ -25,3 +25,14 @@ notifications:
 script:
   - go build -o gospeedtest-client github.com/mhann/gospeedtest/client
   - go build -o gospeedtest-server github.com/mhann/gospeedtest/server
+
+deploy:
+  provider: releases
+  api_key:
+    secure: VuAS9Jbv3JLpt7nS6425hIMRgFyFMoeQ9YsUl4/O6yUTE6THcAsoHdJQ+c5aeSxuJlhoHu0mYzVIlgXN9WrSPpqnSSHo4HwfsMVIzct83m6reAKYYZFz4TYcUJiM0G3q+F5angW8RvBlydbgu/o8/gwpge0AHYYOs7CI7HYgicJ3GIzxr+iVP14nkrDMEphzf71qpkvc64uMD3a50Ohdk38FzosgVgER6TJIZIhmtXamFjdYUZAucrJoVjUmoGiMtffS4yFzy7juAULBIXd7ptd27kozubYQJxFc4ffcC2X03n45hTT/emBME1aIBIfS9/g09rGDc/N9AzH2rHeJvssv2QvLr4oXwXKUM1b/TQpzUOWhiZeLbKmp2E60SrzmXsG5yGEJhjiJouzWupQQ82il6N26ZG2OCauMEnj8r8zlC+iuEVJ69Y7VKrLwP47ZYmNg/P03f1Waswiot0SO8j1Ps8lJFBHNfoZGtOtD2e64EoI6GydqABOMkq0PJUrbQ0cuiSqhvqQjqMLn9DIgMw7aFUs6EjKk2RQegN6mSpbz51gHeiKtr+cMZWCfLx8TE4ZPyi4KbGoWfOCxa1wHwfZrmbtYCbJLrmemp14boTzX2xZQ+NZCZWv+Hp4xDxSmJ1MFMHsbjo4XsyyiS8s17/2qmdBlVFjk00Pwxm8h12k=
+  file:
+    - "gospeedtest-client"
+    - "gospeedtest-server"
+  on:
+    repo: mhann/gospeedtest
+  tags: true
