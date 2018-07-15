@@ -83,16 +83,6 @@ func main() {
 					Value: 30,
 					Usage: "The length of the speed test in seconds.",
 				},
-				cli.UintFlag{
-					Name:  "Delay",
-					Value: 20,
-					Usage: "The delay in minutes between speed test runs.",
-				},
-				cli.StringFlag{
-					Name:  "LogFile",
-					Value: "speedtest.csv",
-					Usage: "The csv file within which to log speed test results.",
-				},
 			},
 		},
 		{
