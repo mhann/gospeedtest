@@ -154,11 +154,13 @@ func runSpeedTest(host string, port uint, length int) float64 {
 				}
 			}
 		case status := <-speedTest.StatusChan:
-			if status.Status == speedtest.StatusAborted || status.Status == speedtest.StatusFinished {
+			if status.Status == speedtest.StatusAborted {
+				log.Println("Speed test aborted!")
+				return 0
+			} else if status.Status == speedtest.StatusFinished {
 				log.Println("Speed test ended")
 				log.Printf("Average bytes per second: %s", humanize.Bytes(averageBytesPerSecond))
 				return float64(averageBytesPerSecond)
-				return (0)
 			} else if status.Status == speedtest.StatusStarted {
 				log.Println("Speed test started.")
 			}
