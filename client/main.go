@@ -10,6 +10,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/mhann/gospeedtest"
+	"github.com/sparrc/go-ping"
 	"github.com/urfave/cli"
 )
 
@@ -89,7 +90,7 @@ func main() {
 			Name:    "ping",
 			Aliases: []string{"p"},
 			Usage:   "Run a series of pings and get statistics",
-			Action:  ping,
+			Action:  runPing,
 		},
 	}
 
@@ -132,15 +133,36 @@ func single(c *cli.Context) error {
 	return nil
 }
 
-func ping(c *cli.Context) error {
+func runPing(c *cli.Context) error {
 	log.Println("Running ping to server plex.hhra.me")
+
+	pinger, err := ping.NewPinger("www.google.com")
+	if err != nil {
+		panic(err)
+	}
+
+	pinger.OnRecv = func(pkt *ping.Packet) {
+		fmt.Printf("%d bytes from %s: icmp_seq=%d time=%v\n",
+			pkt.Nbytes, pkt.IPAddr, pkt.Seq, pkt.Rtt)
+	}
+	pinger.OnFinish = func(stats *ping.Statistics) {
+		fmt.Printf("\n--- %s ping statistics ---\n", stats.Addr)
+		fmt.Printf("%d packets transmitted, %d packets received, %v%% packet loss\n",
+			stats.PacketsSent, stats.PacketsRecv, stats.PacketLoss)
+		fmt.Printf("round-trip min/avg/max/stddev = %v/%v/%v/%v\n",
+			stats.MinRtt, stats.AvgRtt, stats.MaxRtt, stats.StdDevRtt)
+	}
+
+	fmt.Printf("PING %s (%s):\n", pinger.Addr(), pinger.IPAddr())
+	pinger.Run()
+
 	return nil
 }
 
 func runSpeedTest(host string, port uint, length int) float64 {
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
-		log.Printf("Failed to connect to %s port %d")
+		log.Printf("Failed to connect to %s port %d", host, port)
 		return 0
 	}
 

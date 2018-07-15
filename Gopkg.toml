@@ -36,3 +36,7 @@
 [[constraint]]
   branch = "master"
   name = "github.com/dustin/go-humanize"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/sparrc/go-ping"
