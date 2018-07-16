@@ -10,6 +10,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/mhann/gospeedtest"
+	"github.com/sparrc/go-ping"
 	"github.com/urfave/cli"
 )
 
@@ -63,10 +64,33 @@ func main() {
 			},
 		},
 		{
+			Name:    "single",
+			Aliases: []string{"s"},
+			Usage:   "Run a single speed test",
+			Action:  single,
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "Server",
+					Value: "plex.hhra.me",
+					Usage: "The server to run the speedtest from.",
+				},
+				cli.UintFlag{
+					Name:  "Port",
+					Value: 8888,
+					Usage: "The port on which the server software is listening.",
+				},
+				cli.UintFlag{
+					Name:  "Length",
+					Value: 30,
+					Usage: "The length of the speed test in seconds.",
+				},
+			},
+		},
+		{
 			Name:    "ping",
 			Aliases: []string{"p"},
 			Usage:   "Run a series of pings and get statistics",
-			Action:  ping,
+			Action:  runPing,
 		},
 	}
 
@@ -100,15 +124,45 @@ func background(c *cli.Context) error {
 	}
 }
 
-func ping(c *cli.Context) error {
+func single(c *cli.Context) error {
+	port := c.Uint("Port")
+	length := int(c.Uint("Length"))
+
+	runSpeedTest(c.String("Server"), port, length)
+
+	return nil
+}
+
+func runPing(c *cli.Context) error {
 	log.Println("Running ping to server plex.hhra.me")
+
+	pinger, err := ping.NewPinger("www.google.com")
+	if err != nil {
+		panic(err)
+	}
+
+	pinger.OnRecv = func(pkt *ping.Packet) {
+		fmt.Printf("%d bytes from %s: icmp_seq=%d time=%v\n",
+			pkt.Nbytes, pkt.IPAddr, pkt.Seq, pkt.Rtt)
+	}
+	pinger.OnFinish = func(stats *ping.Statistics) {
+		fmt.Printf("\n--- %s ping statistics ---\n", stats.Addr)
+		fmt.Printf("%d packets transmitted, %d packets received, %v%% packet loss\n",
+			stats.PacketsSent, stats.PacketsRecv, stats.PacketLoss)
+		fmt.Printf("round-trip min/avg/max/stddev = %v/%v/%v/%v\n",
+			stats.MinRtt, stats.AvgRtt, stats.MaxRtt, stats.StdDevRtt)
+	}
+
+	fmt.Printf("PING %s (%s):\n", pinger.Addr(), pinger.IPAddr())
+	pinger.Run()
+
 	return nil
 }
 
 func runSpeedTest(host string, port uint, length int) float64 {
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
-		log.Printf("Failed to connect to %s port %d")
+		log.Printf("Failed to connect to %s port %d", host, port)
 		return 0
 	}
 
@@ -146,12 +200,11 @@ func runSpeedTest(host string, port uint, length int) float64 {
 		case status := <-speedTest.StatusChan:
 			if status.Status == speedtest.StatusAborted {
 				log.Println("Speed test aborted!")
-				return float64(0)
+				return 0
 			} else if status.Status == speedtest.StatusFinished {
 				log.Println("Speed test ended")
-				bytesPerSecond := float64(speedTest.Result.BytesTransferred) / speedTest.Result.Duration.Seconds()
-				log.Printf("Average bytes per second: %v", humanize.Bytes(uint64(bytesPerSecond)))
-				return float64(bytesPerSecond)
+				log.Printf("Average bytes per second: %s", humanize.Bytes(averageBytesPerSecond))
+				return float64(averageBytesPerSecond)
 			} else if status.Status == speedtest.StatusStarted {
 				log.Println("Speed test started.")
 			}

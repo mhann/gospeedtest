@@ -4,10 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"log"
-	"math/rand"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -88,38 +86,32 @@ func handleConnection(conn net.Conn) {
 		log.Printf("Length: %s, Direction: %s\n", length, direction)
 		fmt.Fprintf(conn, "a;\n, _")
 
-		speed := make(chan speedtest.BytesPerTime)
+		startSpeedTest(conn)
+	}
+}
 
-		go speedtest.SendData(conn, speed)
+func startSpeedTest(conn net.Conn) {
+	speedTest := speedtest.NewSpeedTest(conn, speedtest.DirectionUp)
 
-		for {
-			select {
-			case <-time.After(10 * time.Second):
-				speedReport, ok := <-speed
-				if !ok {
-					log.Println("Client disconnected")
-					return
-				}
-				if speedReport.Time != 0 {
-					bytesPerSecond := float64(speedReport.Bytes) / speedReport.Time.Seconds()
-					log.Printf("%s/s", humanize.Bytes(uint64(bytesPerSecond)))
-				} else {
-					log.Printf("No data transferred")
-				}
+	go speedTest.SendData()
+
+	for {
+		select {
+		case <-time.After(10 * time.Second):
+			speedReport := <-speedTest.ReportChan
+			if speedReport.Time != 0 {
+				bytesPerSecond := float64(speedReport.Bytes) / speedReport.Time.Seconds()
+				log.Printf("[%s] %s/s", conn.RemoteAddr(), humanize.Bytes(uint64(bytesPerSecond)))
+			} else {
+				log.Printf("[%s] No data transferred", conn.RemoteAddr())
+			}
+		case status := <-speedTest.StatusChan:
+			if status.Status == speedtest.StatusAborted {
+				log.Printf("[%s] Speed test aborted!", conn.RemoteAddr())
+				return
 			}
 		}
-
-		lengthInt, _ := strconv.Atoi(length)
-
-		bytesSent := 0
-
-		for bytesSent < lengthInt {
-			bytesBuffer := make([]byte, 512)
-			rand.Read(bytesBuffer)
-			conn.Write(bytesBuffer)
-			bytesSent += 512
-		}
-
-		log.Printf("Finished sending data")
 	}
+
+	log.Printf("[%s] Finished sending data", conn.RemoteAddr())
 }
