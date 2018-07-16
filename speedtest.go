@@ -2,9 +2,12 @@ package speedtest
 
 import (
 	"errors"
+	"log"
 	"math/rand"
 	"net"
 	"time"
+
+	"github.com/sparrc/go-ping"
 )
 
 type BytesPerTime struct {
@@ -22,6 +25,10 @@ type SpeedTestResult struct {
 	BytesTransferred uint
 	AverageSpeed     uint
 	PeakSpeed        uint
+	InitialPing      *ping.Statistics
+	DuringPing       *ping.Statistics
+	AfterPing        *ping.Statistics
+	BufferBloat      uint // Buffer bloat in ms
 }
 
 type SpeedTest struct {
@@ -30,8 +37,10 @@ type SpeedTest struct {
 	Connection     net.Conn
 	StatusChan     chan SpeedTestStatus
 	DataStreamChan chan BytesPerTime // The raw stream used to report bytes per time on each send of bytes.
+	ControlChan    chan SpeedTestControl
 	TestComplete   bool
 	Direction      Direction
+	Duration       int
 }
 
 type Direction int
@@ -44,9 +53,20 @@ const (
 type Status int
 
 const (
-	StatusStarted Status = iota
+	StatusReady Status = iota
+	StatusStarted
+	StatusRunningInitialPings
+	StatusRunningFinalPings
 	StatusFinished
 	StatusAborted
+)
+
+type SpeedTestControl int
+
+const (
+	ControlStart SpeedTestControl = iota
+	ControlStop
+	ControlAbort
 )
 
 func NewSpeedTest(connection net.Conn, direction Direction) *SpeedTest {
@@ -56,6 +76,7 @@ func NewSpeedTest(connection net.Conn, direction Direction) *SpeedTest {
 		DataStreamChan: make(chan BytesPerTime),
 		Connection:     connection,
 		Direction:      direction,
+		Duration:       20,
 	}
 }
 
@@ -135,12 +156,41 @@ func (sp *SpeedTest) SendData() {
 	return
 }
 
-func (sp *SpeedTest) ReceiveData(conn net.Conn, reportChannel chan BytesPerTime, length int) error {
+func (sp *SpeedTest) runPings() *ping.Statistics {
+	pinger, err := ping.NewPinger("www.google.com")
+	if err != nil {
+		panic(err)
+	}
+	pinger.Count = 10
+	pinger.Run()                 // blocks until finished
+	stats := pinger.Statistics() // get send/receive/rtt stats
+
+	return stats
+}
+
+func RunSpeedTest() {
+
+}
+
+func (sp *SpeedTest) ReceiveData() error {
 	buffer := make([]byte, 1024)
 
 	sp.SpeedAggregator()
 
 	speedTestStart := time.Now()
+
+	sp.StatusChan <- SpeedTestStatus{
+		Status: StatusReady,
+	}
+
+	for control := range sp.ControlChan {
+		log.Println("Recieved!")
+		if control == ControlStart {
+			break
+		} else {
+			break
+		}
+	}
 
 	sp.StatusChan <- SpeedTestStatus{
 		Status: StatusStarted,
@@ -149,15 +199,15 @@ func (sp *SpeedTest) ReceiveData(conn net.Conn, reportChannel chan BytesPerTime,
 	for {
 		start := time.Now()
 
-		if time.Since(speedTestStart) > (time.Duration(length) * time.Second) {
+		if time.Since(speedTestStart) > (time.Duration(sp.Duration) * time.Second) {
 			sp.StatusChan <- SpeedTestStatus{
 				Status: StatusFinished,
 			}
-			conn.Close()
-			return nil
+			sp.Connection.Close()
+			break
 		}
 
-		w, err := conn.Read(buffer)
+		w, err := sp.Connection.Read(buffer)
 		if err != nil {
 			return err
 		}
@@ -167,6 +217,8 @@ func (sp *SpeedTest) ReceiveData(conn net.Conn, reportChannel chan BytesPerTime,
 			Time:  time.Since(start),
 		}
 	}
+
+	sp.Result.AverageSpeed = uint(float64(sp.Result.BytesTransferred) / sp.Result.Duration.Seconds())
 
 	return nil
 }

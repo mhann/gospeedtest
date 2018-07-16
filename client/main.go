@@ -182,8 +182,7 @@ func runSpeedTest(host string, port uint, length int) float64 {
 
 	speedTest := speedtest.NewSpeedTest(conn, speedtest.DirectionDown)
 
-	speed := make(chan speedtest.BytesPerTime)
-	go speedTest.ReceiveData(conn, speed, length)
+	go speedTest.ReceiveData()
 
 	for {
 		select {
@@ -203,8 +202,8 @@ func runSpeedTest(host string, port uint, length int) float64 {
 				return 0
 			} else if status.Status == speedtest.StatusFinished {
 				log.Println("Speed test ended")
-				log.Printf("Average bytes per second: %s", humanize.Bytes(averageBytesPerSecond))
-				return float64(averageBytesPerSecond)
+				log.Printf("Average bytes per second: %s", humanize.Bytes(uint64(speedTest.Result.AverageSpeed)))
+				return float64(speedTest.Result.AverageSpeed)
 			} else if status.Status == speedtest.StatusStarted {
 				log.Println("Speed test started.")
 			}
